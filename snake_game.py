@@ -11,12 +11,10 @@ game_over_font = pygame.font.Font(None, 100)
 play_again_font = pygame.font.Font(None, 48)
 
 white = (255, 255, 255)
+left, up, down, right = "left", "up", "down", "right"
 
 snake_img = pygame.image.load('snake_smaller.png')
 black_img = pygame.image.load('black_smaller.png')
-
-top, left, bottom, right = 0, 0, 760, 760
-start_over = False
 
 
 class Snake:
@@ -24,7 +22,7 @@ class Snake:
     direction = "left"
     score = 0
     
-    def __init__(self, length, game_mode="slow"):
+    def __init__(self, length, game_mode="default"):
         self.x, self.y = [200], [200]
         self.game_mode = game_mode
         self.length = length + 1  # # misleading length, due to display.blit workaround
@@ -50,13 +48,13 @@ class Snake:
             done = self.isCollided(apple)
             
         direc = self.direction
-        if direc == "left":
+        if direc == left:
             x[0] -= speed
-        elif direc == "right":
+        elif direc == right:
             x[0] += speed
-        elif direc == "up":
+        elif direc == up:
             y[0] -= speed
-        elif direc == "down":
+        elif direc == down:
             y[0] += speed
         
         if (Snake.length_copy <= length - 1):  # # small collission immunity; for initializaiton
@@ -80,25 +78,31 @@ class Snake:
                 Application.display.blit(black_img, (i, j))
 
     def checkBorder(self):
-        x, y = self.x, self.y
+        x, y, is_border = self.x, self.y, -1
+        
         if (x[0] <= 0):
-            self.direction = "down"
-            
+            self.direction = down
+            is_border = 0
         if (y[0] >= 780):
-            self.direction = "right"
-            
+            self.direction = right
+            is_border = 1
         if (x[0] >= 780):
-            self.direction = "up"
-            
+            self.direction = up
+            is_border = 2
         if (y[0] <= 0):
-            self.direction = "left"
+            self.direction = left
+            is_border = 3
             if (x[0] <= 0):  # # necessary to circle back for counter clockwise rotation
-                self.direction = "down"
+                self.direction = down
+                is_border = 0
             
+        
+        return is_border
+
     def isCollided(self, apple):
         x, y = self.x, self.y
         for i in range(2, len(x) - 1):
-            if (x[0] == x[i] and y[0] == y[i]):
+            if (x[0] == x[i] and y[0] == y[i]):  # # fix collission?
                 return True
         
             if (self.isApple(x, y, apple)):
@@ -107,17 +111,21 @@ class Snake:
                 apple.locationCheck()
                 apple.render()
                 
-                # # fast mode? linear vs. constant? command line?
                 self.score += 1
                 
                 game_mode = self.game_mode
                 
                 if (game_mode == "slow"):
                     self.increaseLength(2)
-                elif (game_mode == "fast"):
+                elif (game_mode == "default"):
                     self.increaseLength(5)
-                elif (game_mode == "hyper"):
+                elif (game_mode == "fast"):
                     self.increaseLength(20)
+                elif (game_mode == "hyper"):  # # exponential
+                    print (self.score ** 2)
+                    self.increaseLength(int(self.score ** 2))
+                elif (game_mode == "impossible"):
+                    self.increaseLength(int(self.score ** 3))
                 else:
                     self.increaseLength(int(self.game_mode))
                 
@@ -139,14 +147,7 @@ class Snake:
             self.length += 1
             self.x.append(self.x[0])
             self.y.append(self.y[0])
-    
-    def clear(self):
-        self.direction = None
-        self.length = None
-        self.y = None
-        self.x = None
-        self.speed = None
-        
+
         
 class Apple:
 
@@ -174,7 +175,9 @@ class Application:
         start_over = False
         Application.display = pygame.display.set_mode(size=(800, 800))
         args = sys.argv
-        if (len(args) != 1): ## need exceptions
+        print(len(args))
+        if (len(args) != 1):  # # need exceptions
+            print("hi")
             if args[1] == "custom":
                 self.player = Snake(5, game_mode=int(args[2]))
             else:
@@ -190,51 +193,58 @@ class Application:
         apple.locationCheck()
         apple.render()
         
-        
         self.while_open(player, apple)
-        
         
     def while_open(self, player, apple):
         while True:
-            for event in pygame.event.get():  # # closes with exit
-                if event.type == pygame.QUIT:
-                    sys.exit()
-                    
-                # # remember if reach wall change direction
-                    
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_LEFT and player.direction != "right":
-                        player.direction = "left"
-                    elif event.key == pygame.K_RIGHT and player.direction != "left":
-                        player.direction = "right"
-                    elif event.key == pygame.K_UP and player.direction != "down":
-                        player.direction = "up"
-                    elif event.key == pygame.K_DOWN and player.direction != "up":
-                        player.direction = "down"
+            for event in pygame.event.get():
+                self.exit(event)
+                self.check_keypress(event, player, player.checkBorder())
     
             done = player.moveDir(apple)
             
             if not done:
-                apple.render()
-                player.render()
-                pygame.display.update()
-                time.sleep(.033)
+                self.repeat(player, apple)
             else:
                 player.render()
-                self.game_over(player)
-                self.while_repeat(player)
+                self.quit(player)
                 break
+    
+    def repeat(self, player, apple):
+        apple.render()
+        player.render()
+        pygame.display.update()
+        time.sleep(.033)
             
-    def while_repeat(self, player):
+    def check_keypress(self, event, player, check):
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_LEFT and player.direction != right:
+                if (check == 2 or check == -1):
+                    player.direction = left
+            elif event.key == pygame.K_RIGHT and player.direction != left:
+                if (check == 0 or check == -1):
+                    player.direction = right
+            elif event.key == pygame.K_UP and player.direction != down:
+                if (check == 1 or check == -1):
+                    player.direction = up
+            elif event.key == pygame.K_DOWN and player.direction != up:
+                if (check == 3 or check == -1):
+                    player.direction = down
+        
+    def exit(self, event):
+        if event.type == pygame.QUIT:
+            sys.exit()
+            
+    def quit(self, player):
+        self.game_over(player)
         global start_over
         while True:
             for event in pygame.event.get():  # # closes with exit
-                if event.type == pygame.QUIT:
-                    sys.exit()
-                elif event.type == pygame.KEYDOWN:
+                self.exit(event)
+                
+                if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_y:
                         start_over = True
-                        player.clear()
                         break
                     elif event.key == pygame.K_n:
                         sys.exit()
@@ -243,8 +253,6 @@ class Application:
             
             if start_over:
                 break
-        
-        
 
     def game_over(self, player):
         Application.display.blit(game_over_font.render("Game Over!", True, white), (200, 200))
