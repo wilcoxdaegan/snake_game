@@ -10,6 +10,8 @@ pygame.init()
 game_over_font = pygame.font.Font(None, 100)
 play_again_font = pygame.font.Font(None, 48)
 
+white = (255, 255, 255)
+
 snake_img = pygame.image.load('snake_smaller.png')
 black_img = pygame.image.load('black_smaller.png')
 
@@ -20,9 +22,11 @@ start_over = False
 class Snake:
     speed = 10
     direction = "left"
+    score = 0
     
-    def __init__(self, length):
+    def __init__(self, length, game_mode="slow"):
         self.x, self.y = [200], [200]
+        self.game_mode = game_mode
         self.length = length + 1  # # misleading length, due to display.blit workaround
         Snake.length_copy = self.length
         
@@ -93,7 +97,7 @@ class Snake:
             
     def isCollided(self, apple):
         x, y = self.x, self.y
-        for i in range(2, len(x) - 1):  # # not ideal - but works
+        for i in range(2, len(x) - 1):
             if (x[0] == x[i] and y[0] == y[i]):
                 return True
         
@@ -102,8 +106,21 @@ class Snake:
                 apple.location = random.randint(0, 780), random.randint(0, 780)
                 apple.locationCheck()
                 apple.render()
-                for i in range(0, 2):
-                    self.increaseLength()
+                
+                # # fast mode? linear vs. constant? command line?
+                self.score += 1
+                
+                game_mode = self.game_mode
+                
+                if (game_mode == "slow"):
+                    self.increaseLength(2)
+                elif (game_mode == "fast"):
+                    self.increaseLength(5)
+                elif (game_mode == "hyper"):
+                    self.increaseLength(20)
+                else:
+                    self.increaseLength(int(self.game_mode))
+                
         return False
     
     def isApple(self, x, y, apple):
@@ -117,10 +134,11 @@ class Snake:
                 if (x[0] - i == apple.location[0] and y[0] - j == apple.location[1]):
                     return True
             
-    def increaseLength(self):
-        self.length += 1
-        self.x.append(self.x[0])
-        self.y.append(self.y[0])
+    def increaseLength(self, amount):
+        for _ in range(0, amount):
+            self.length += 1
+            self.x.append(self.x[0])
+            self.y.append(self.y[0])
     
     def clear(self):
         self.direction = None
@@ -144,8 +162,6 @@ class Apple:
             
         if (self.location[1] % 10 != 0):
             self.location = self.location[0], (self.location[1] - (self.location[1] % 10))
-            
-        # # make sure apple doesn't spawn in the snake
     
     def derender(self):
         Application.display.blit(black_img, self.location)
@@ -157,13 +173,28 @@ class Application:
         global start_over 
         start_over = False
         Application.display = pygame.display.set_mode(size=(800, 800))
-        self.player = Snake(5)
+        args = sys.argv
+        if (len(args) != 1): ## need exceptions
+            if args[1] == "custom":
+                self.player = Snake(5, game_mode=int(args[2]))
+            else:
+                self.player = Snake(5, game_mode=args[1])
+        else:
+            self.player = Snake(5)
+        
         player = self.player
+        
         pygame.display.set_caption("Snake")
+        
         apple = Apple()
         apple.locationCheck()
         apple.render()
         
+        
+        self.while_open(player, apple)
+        
+        
+    def while_open(self, player, apple):
         while True:
             for event in pygame.event.get():  # # closes with exit
                 if event.type == pygame.QUIT:
@@ -184,32 +215,42 @@ class Application:
             done = player.moveDir(apple)
             
             if not done:
+                apple.render()
                 player.render()
                 pygame.display.update()
                 time.sleep(.033)
             else:
-                self.game_over()
+                player.render()
+                self.game_over(player)
+                self.while_repeat(player)
                 break
             
+    def while_repeat(self, player):
+        global start_over
         while True:
             for event in pygame.event.get():  # # closes with exit
                 if event.type == pygame.QUIT:
                     sys.exit()
                 elif event.type == pygame.KEYDOWN:
-                    start_over = True
-                    player.clear()
-                    break
+                    if event.key == pygame.K_y:
+                        start_over = True
+                        player.clear()
+                        break
+                    elif event.key == pygame.K_n:
+                        sys.exit()
             
             pygame.display.update()
             
             if start_over:
                 break
+        
+        
 
-    def game_over(self):
-        Application.display.blit(game_over_font.render("Game Over!", True, (255, 255, 255)), (200, 200))
-        Application.display.blit(play_again_font.render("Play again? Press Any Key", True, (255, 255, 255)), (190, 275))
+    def game_over(self, player):
+        Application.display.blit(game_over_font.render("Game Over!", True, white), (200, 200))
+        Application.display.blit(play_again_font.render("Play again? (Y/N)", True, white), (190, 300))
+        Application.display.blit(play_again_font.render("Score: " + str(player.score), True, white), (325, 325))
 
         
 while True:        
     App = Application()
-
